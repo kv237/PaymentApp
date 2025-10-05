@@ -1,79 +1,99 @@
 const express = require("express");
-const mongoose = require("mongoose");
-const cors = require("cors");
 const Razorpay = require("razorpay");
+const bodyParser = require("body-parser");
+const cors = require("cors");
+const mongoose = require("mongoose");
 require("dotenv").config();
-const path = require("path");
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(bodyParser.json());
 
-// Serve frontend
-app.use(express.static(path.join(__dirname, "public")));
+// ---------------- MONGO CONNECTION ----------------
+mongoose.connect(process.env.MONGO_URI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+})
+.then(() => console.log("✅ MongoDB Connected Successfully"))
+.catch((err) => console.log("❌ MongoDB Connection Error:", err));
 
-// MongoDB connection
-mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log("MongoDB Connected"))
-  .catch(err => console.log(err));
-
-// Payment schema
-const paymentSchema = new mongoose.Schema({
-  name: String,
-  email: String,
-  phone: String,
-  amount: Number,
-  orderId: String,
-  paymentId: String,
-  status: { type: String, enum: ["PENDING", "SUCCESS", "FAILED"], default: "PENDING" },
-  createdAt: { type: Date, default: Date.now }
+// ---------------- BOOKING SCHEMA ----------------
+const bookingSchema = new mongoose.Schema({
+    name: String,
+    email: String,
+    phone: String,
+    amount: Number,
+    paymentId: String,
+    status: {
+        type: String,
+        enum: ["PENDING", "SUCCESS", "FAILED"],
+        default: "PENDING"
+    },
+    createdAt: { type: Date, default: Date.now }
 });
-const Payment = mongoose.model("Payment", paymentSchema);
 
-// Razorpay instance
+const Booking = mongoose.model("Booking", bookingSchema);
+
+// ---------------- RAZORPAY SETUP ----------------
 const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID,
-  key_secret: process.env.RAZORPAY_KEY_SECRET
+    key_id: process.env.RAZORPAY_KEY_ID,
+    key_secret: process.env.RAZORPAY_KEY_SECRET
 });
 
-// Create order
+// ---------------- CREATE ORDER ----------------
+
 app.post("/create-order", async (req, res) => {
-  const { name, email, phone, amount } = req.body;
-  try {
-    const order = await razorpay.orders.create({
-      amount: amount * 100,
-      currency: "INR",
-      receipt: `receipt_${Date.now()}`
-    });
+    const { amount, name, email, phone } = req.body;
 
-    const payment = new Payment({ name, email, phone, amount, orderId: order.id });
-    await payment.save();
+    const options = {
+        amount: amount * 100, // convert to paise
+        currency: "INR",
+        receipt: "receipt_order_" + Date.now(),
+    };
 
-    res.json({ orderId: order.id, key: process.env.RAZORPAY_KEY_ID });
-  } catch (err) {
-    console.log(err);
-    res.status(500).json({ error: "Error creating order" });
-  }
+    try {
+        const order = await razorpay.orders.create(options);
+
+        // Save booking with PENDING status
+        const booking = new Booking({
+            name,
+            email,
+            phone,
+            amount,
+            paymentId: order.id,
+            status: "PENDING"
+        });
+        await booking.save();
+
+        res.json(order);
+    } catch (err) {
+        console.error("❌ Error creating order:", err);
+        res.status(500).send("Error creating order");
+    }
 });
 
-// Verify payment
+// ---------------- VERIFY PAYMENT ----------------
 app.post("/verify-payment", async (req, res) => {
-  const { orderId, paymentId, status } = req.body;
-  try {
-    const payment = await Payment.findOne({ orderId });
-    if (!payment) return res.status(404).json({ success: false });
+    const { paymentId, status } = req.body;
 
-    payment.paymentId = paymentId;
-    payment.status = status;
-    await payment.save();
-
-    res.json({ success: true });
-  } catch (err) {
-    console.log(err);
-    res.status(500).json({ success: false });
-  }
+    try {
+        await Booking.findOneAndUpdate(
+            { paymentId },
+            { status: status || "SUCCESS" }
+        );
+        res.send("✅ Payment status updated");
+    } catch (err) {
+        console.error("❌ Error verifying payment:", err);
+        res.status(500).send("Error verifying payment");
+    }
 });
 
-// Start server
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+// ---------------- SERVE FRONTEND (index.html) ----------------
+app.use(express.static(path.join(__dirname, "public"))); // ✅ Add this line
+
+app.get("/", (req, res) => {
+    res.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
+// ---------------- START SERVER ----------------
+app.listen(8080, () => console.log("🚀 Server running on port 8080"));
