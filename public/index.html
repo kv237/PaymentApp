@@ -67,9 +67,11 @@ document.getElementById("bookingForm").addEventListener("submit", async (e) => {
     const phone = document.getElementById("phone").value;
     const amount = document.getElementById("amount").value;
 
+    const backendURL = "https://slotbookingpayment.onrender.com"; // ✅ your Render backend URL
+
     try {
         // Call backend to create order
-        const res = await fetch("/create-order", {
+        const res = await fetch(`${backendURL}/create-order`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ name, email, phone, amount })
@@ -79,7 +81,7 @@ document.getElementById("bookingForm").addEventListener("submit", async (e) => {
 
         // Razorpay checkout options
         const options = {
-            key: "rzp_test_RPipadCqr6Hhg8", // 🔹 Your Razorpay test key
+            key: "rzp_test_RPipadCqr6Hhg8", // Your Razorpay test key
             amount: order.amount,
             currency: order.currency,
             name: "Slot Booking",
@@ -89,7 +91,7 @@ document.getElementById("bookingForm").addEventListener("submit", async (e) => {
                 alert("✅ Payment Successful: " + response.razorpay_payment_id);
 
                 // Update payment status in backend
-                await fetch("/verify-payment", {
+                await fetch(`${backendURL}/verify-payment`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ paymentId: order.id, status: "SUCCESS" })
@@ -107,6 +109,3 @@ document.getElementById("bookingForm").addEventListener("submit", async (e) => {
     }
 });
 </script>
-
-</body>
-</html>

@@ -41,7 +41,6 @@ const razorpay = new Razorpay({
 });
 
 // ---------------- CREATE ORDER ----------------
-
 app.post("/create-order", async (req, res) => {
     const { amount, name, email, phone } = req.body;
 
@@ -86,13 +85,6 @@ app.post("/verify-payment", async (req, res) => {
         console.error("❌ Error verifying payment:", err);
         res.status(500).send("Error verifying payment");
     }
-});
-
-// ---------------- SERVE FRONTEND (index.html) ----------------
-app.use(express.static(path.join(__dirname, "public"))); // ✅ Add this line
-
-app.get("/", (req, res) => {
-    res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
 // ---------------- START SERVER ----------------
